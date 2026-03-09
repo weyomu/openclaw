@@ -23,7 +23,7 @@ source "azure-arm" "ubuntu24" {
 
   managed_image_resource_group_name = "rg-image-builders"
   managed_image_name                = local.image_name
-  managed_image_location            = "East US"
+  location                          = "East US"
 
   os_type                           = "Linux"
   image_publisher                   = "Canonical"
@@ -33,8 +33,6 @@ source "azure-arm" "ubuntu24" {
   vm_size                           = "Standard_D2s_v3"
   ssh_username                      = "packeruser"
 
-  async_os_disk_cleanup             = true
-  async_resourcegroup_cleanup       = true
 }
 
 build {
