@@ -1,0 +1,67 @@
+name: Build OpenClaw VM Image
+
+on:
+  push:
+    tags:
+      - 'openclaw-v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Packer
+        run: |
+          sudo apt update
+          sudo apt install -y gnupg software-properties-common
+          wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt update && sudo apt install -y packer
+
+      - name: Build Custom Image with Packer
+        working-directory: ./packer
+        run: |
+          packer build \
+            -var "azure_client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -var "azure_client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+            -var "azure_tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -var "azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            openclaw.pkr.hcl
+
+      - name: Login to Azure
+        run: |
+          az login --service-principal \
+            --username "${{ secrets.AZURE_CLIENT_ID }}" \
+            --password "${{ secrets.AZURE_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.AZURE_TENANT_ID }}"
+
+      - name: Publish to Shared Image Gallery
+        env:
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          VER=${VERSION_TAG#openclaw-v}
+
+          # 查询最新 Managed Image（按名称排序取最后一个）
+          IMAGE_NAME=$(az image list \
+            --resource-group rg-image-builders \
+            --query "[?starts_with(name, 'openclaw-ubuntu24')].name | sort(@)[-1]" \
+            -o tsv)
+
+          if [ -z "$IMAGE_NAME" ]; then
+            echo "❌ No image found in rg-image-builders!"
+            exit 1
+          fi
+
+          echo "✅ Found image: $IMAGE_NAME"
+          echo "📤 Publishing as version: $VER"
+
+          az sig image-version create \
+            --gallery-name OpenClawGallery \
+            --gallery-image-definition openclaw-ubuntu24 \
+            --gallery-image-version "$VER" \
+            --managed-image "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-image-builders/providers/Microsoft.Compute/images/$IMAGE_NAME" \
+            --replica-count 1 \
+            --target-regions "East US=1" \
+            --resource-group rg-shared-images
