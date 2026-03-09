@@ -24,7 +24,6 @@ source "azure-arm" "ubuntu24" {
   build_resource_group_name         = "rg-image-builders"
   managed_image_resource_group_name = "rg-image-builders"
   managed_image_name                = local.image_name
-  location                          = "East US"
 
   os_type                           = "Linux"
   image_publisher                   = "Canonical"
