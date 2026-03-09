@@ -21,6 +21,7 @@ source "azure-arm" "ubuntu24" {
   tenant_id                         = var.azure_tenant_id
   subscription_id                   = var.azure_subscription_id
 
+  build_resource_group_name         = "rg-image-builders"
   managed_image_resource_group_name = "rg-image-builders"
   managed_image_name                = local.image_name
   location                          = "East US"
