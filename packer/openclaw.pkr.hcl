@@ -27,8 +27,8 @@ source "azure-arm" "ubuntu24" {
 
   os_type                           = "Linux"
   image_publisher                   = "Canonical"
-  image_offer                       = "0001-com-ubuntu-server-jammy"
-  image_sku                         = "24_04-lts"
+  image_offer                       = "ubuntu-24_04-lts"
+  image_sku                         = "server"
 
   vm_size                           = "Standard_D2s_v3"
   ssh_username                      = "packeruser"
