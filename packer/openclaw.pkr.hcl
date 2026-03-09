@@ -30,7 +30,7 @@ source "azure-arm" "ubuntu24" {
   image_offer                       = "ubuntu-24_04-lts"
   image_sku                         = "server"
 
-  vm_size                           = "Standard_D2s_v3"
+  vm_size                           = "Standard_D2s_v5"
   ssh_username                      = "packeruser"
 
 }
