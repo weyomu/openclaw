@@ -39,22 +39,19 @@ build {
   name = "openclaw-custom-image"
   sources = ["source.azure-arm.ubuntu24"]
 
-  # 上传整个 openclaw 目录到 /tmp/openclaw
+  # Upload a tarball so scp does not have to handle a "." source path.
   provisioner "file" {
-    source      = "../."          # 当前 Git 仓库根目录
-    destination = "/tmp/openclaw"
-  }
-
-  # 上传 install.sh 单独（确保权限）
-  provisioner "file" {
-    source      = "../install.sh"
-    destination = "/tmp/install.sh"
+    source      = "openclaw-src.tgz"
+    destination = "/tmp/openclaw-src.tgz"
   }
 
   provisioner "shell" {
     inline = [
-      "sudo chmod +x /tmp/install.sh",
-      "sudo /tmp/install.sh",
+      "rm -rf /tmp/openclaw",
+      "mkdir -p /tmp/openclaw",
+      "tar -xzf /tmp/openclaw-src.tgz -C /tmp/openclaw",
+      "sudo chmod +x /tmp/openclaw/install.sh",
+      "sudo /tmp/openclaw/install.sh",
 
       # 关键：清理 VM（必须！）
       "echo 'Deprovisioning VM for generalization...'",

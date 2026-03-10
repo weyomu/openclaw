@@ -3,7 +3,7 @@ name: Build OpenClaw VM Image
 on:
   push:
     tags:
-      - 'openclaw-v*'
+      - "openclaw-v*"
 
 jobs:
   build:
@@ -11,6 +11,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Package repo for image build
+        run: |
+          tar --exclude-vcs --exclude='./packer/openclaw-src.tgz' -czf packer/openclaw-src.tgz .
 
       - name: Install Packer
         run: |
