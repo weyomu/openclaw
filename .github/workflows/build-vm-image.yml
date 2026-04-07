@@ -129,6 +129,14 @@ jobs:
             -var "image_version=${{ needs.prepare.outputs.image_version }}" \
             openclaw.pkr.hcl
 
+      - name: Ensure managed image resource group exists
+        run: |
+          if ! az group show --name "rg-image-builders" &>/dev/null; then
+            az group create --name "rg-image-builders" --location "${{ env.AZURE_LOCATION }}"
+          else
+            echo "rg-image-builders already exists"
+          fi
+
       - name: Build VM image with Packer
         if: needs.prepare.outputs.dry_run != 'true'
         working-directory: ${{ env.PACKER_DIR }}
@@ -143,6 +151,25 @@ jobs:
             -var "image_version=${{ needs.prepare.outputs.image_version }}" \
             openclaw.pkr.hcl
           echo "Packer build completed"
+
+      - name: Publish managed image to Shared Image Gallery
+        if: needs.prepare.outputs.dry_run != 'true'
+        run: |
+          MANAGED_IMAGE_ID=$(az image show \
+            --resource-group "rg-image-builders" \
+            --name "openclaw-${{ needs.prepare.outputs.image_version }}" \
+            --query id --output tsv)
+          echo "Managed image ID: ${MANAGED_IMAGE_ID}"
+
+          az sig image-version create \
+            --gallery-name "${{ env.GALLERY_NAME }}" \
+            --gallery-image-definition "${{ env.IMAGE_DEFINITION }}" \
+            --gallery-image-version "${{ needs.prepare.outputs.image_version }}" \
+            --resource-group "${{ env.SIG_RESOURCE_GROUP }}" \
+            --managed-image "${MANAGED_IMAGE_ID}" \
+            --target-regions "${{ env.AZURE_LOCATION }}" \
+            --output table
+          echo "Image published to SIG successfully"
 
       - name: Skip build (dry run mode)
         if: needs.prepare.outputs.dry_run == 'true'
