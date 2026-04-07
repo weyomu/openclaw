@@ -84,7 +84,6 @@ source "azure-arm" "openclaw_ubuntu" {
   # Output: managed image (intermediate step before SIG)
   managed_image_resource_group_name = local.managed_image_rg
   managed_image_name                = local.managed_image_name
-  managed_image_location            = local.location
 
   # Base image: Ubuntu 24.04 LTS (same as your working config)
   os_type         = "Linux"
