@@ -124,9 +124,6 @@ source "azure-arm" "openclaw_ubuntu" {
     storage_account_type = "Standard_LRS"
   }
 
-  # 镜像已通用化（deprovision），可用于创建多台 VM
-  generalize = true
-
   azure_tags = local.tags
 }
 
