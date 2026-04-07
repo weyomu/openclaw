@@ -1,0 +1,86 @@
+{
+  "_comment": "Azure Marketplace VM 方案（Plan）的技术配置详情",
+  "_doc": "此文件补充 offer-config.json，包含 VM 部署的详细技术参数",
+
+  "planId": "openclaw-standard",
+
+  "vmImageVersions": [
+    {
+      "version": "1.0.0",
+      "sigImageVersionId": "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/rg-shared-images/providers/Microsoft.Compute/galleries/MyGallery/images/OpenClawImage/versions/1.0.0",
+      "isHidden": false
+    }
+  ],
+
+  "deploymentConfiguration": {
+    "minimumVmCores": 2,
+    "minimumMemoryGb": 4,
+    "recommendedVmSizes": [
+      {
+        "sku": "Standard_B2s",
+        "description": "2 vCPU, 4 GB RAM — 适合个人使用和轻量工作负载"
+      },
+      {
+        "sku": "Standard_D2s_v3",
+        "description": "2 vCPU, 8 GB RAM — 推荐配置，适合多频道并发"
+      },
+      {
+        "sku": "Standard_D4s_v3",
+        "description": "4 vCPU, 16 GB RAM — 高性能配置，适合团队使用"
+      }
+    ]
+  },
+
+  "networkConfiguration": {
+    "virtualNetworkRules": [
+      {
+        "port": 22,
+        "protocol": "TCP",
+        "type": "Inbound",
+        "description": "SSH — 建议限制为可信 IP 段"
+      },
+      {
+        "port": 18789,
+        "protocol": "TCP",
+        "type": "Inbound",
+        "description": "OpenClaw Gateway WebSocket — 建议通过 Tailscale 或 SSH 隧道访问，不对公网开放"
+      }
+    ]
+  },
+
+  "postDeploymentInstructions": {
+    "steps": [
+      {
+        "order": 1,
+        "title": "SSH 登录 VM",
+        "command": "ssh azureuser@<VM_PUBLIC_IP>",
+        "description": "使用 Azure 门户或 CLI 获取 VM 的公网 IP"
+      },
+      {
+        "order": 2,
+        "title": "编辑 OpenClaw 配置文件",
+        "command": "sudo nano /var/lib/openclaw/.openclaw/openclaw.json",
+        "description": "填入你的 AI 模型 API Key 和消息频道配置"
+      },
+      {
+        "order": 3,
+        "title": "启动 OpenClaw 服务",
+        "command": "sudo systemctl start openclaw && sudo systemctl status openclaw",
+        "description": "服务应显示 active (running) 状态"
+      },
+      {
+        "order": 4,
+        "title": "查看实时日志",
+        "command": "sudo journalctl -u openclaw -f",
+        "description": "确认服务正常运行，没有错误"
+      },
+      {
+        "order": 5,
+        "title": "配置消息频道",
+        "command": "openclaw onboard",
+        "description": "运行引导向导配置 Telegram、WhatsApp、Discord 等频道"
+      }
+    ],
+    "documentationUrl": "https://openclaw.ai/docs/azure"
+  }
+}

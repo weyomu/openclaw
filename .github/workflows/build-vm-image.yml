@@ -1,0 +1,313 @@
+# =============================================================================
+# build-vm-image.yml
+# GitHub Actions 工作流：推送版本 Tag 时自动构建 OpenClaw VM 镜像并发布到 Azure SIG
+#
+# 触发条件：git tag openclaw-v1.0.0 && git push origin openclaw-v1.0.0
+#
+# 所需 GitHub Secrets（在 Settings > Secrets and variables > Actions 中配置）：
+#   AZURE_CLIENT_ID        - Service Principal App ID
+#   AZURE_CLIENT_SECRET    - Service Principal 密码
+#   AZURE_TENANT_ID        - Azure AD 租户 ID
+#   AZURE_SUBSCRIPTION_ID  - Azure 订阅 ID
+# =============================================================================
+
+name: Build OpenClaw VM Image
+
+on:
+  push:
+    tags:
+      - "openclaw-v*"   # 仅在推送 openclaw-v* 格式的 tag 时触发，例如 openclaw-v1.0.0
+
+  # 允许手动触发（用于测试）
+  workflow_dispatch:
+    inputs:
+      image_version:
+        description: "镜像版本号 (格式: major.minor.patch，例如 1.0.0)"
+        required: true
+        default: "1.0.0"
+      dry_run:
+        description: "仅验证配置，不执行实际构建"
+        required: false
+        type: boolean
+        default: false
+
+# 同一时刻只允许一个构建任务运行（防止版本冲突）
+concurrency:
+  group: build-vm-image
+  cancel-in-progress: false
+
+env:
+  # Azure 资源配置（与 Azure CLI 创建时保持一致）
+  AZURE_LOCATION: "East US"
+  SIG_RESOURCE_GROUP: "rg-shared-images"
+  GALLERY_NAME: "MyGallery"
+  IMAGE_DEFINITION: "OpenClawImage"
+  PACKER_DIR: "packer"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: 解析版本号
+  # ---------------------------------------------------------------------------
+  prepare:
+    name: Prepare Build Context
+    runs-on: ubuntu-latest
+    outputs:
+      image_version: ${{ steps.version.outputs.version }}
+      dry_run: ${{ steps.version.outputs.dry_run }}
+
+    steps:
+      - name: Extract image version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.image_version }}"
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
+          else
+            # 从 tag 中提取版本号：openclaw-v1.2.3 → 1.2.3
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#openclaw-v}"
+            DRY_RUN="false"
+          fi
+
+          # 验证版本号格式（必须是 major.minor.patch）
+          if ! echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid version format: '${VERSION}'. Expected: major.minor.patch (e.g. 1.0.0)"
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "dry_run=${DRY_RUN}" >> $GITHUB_OUTPUT
+          echo "Image version: ${VERSION} (dry_run: ${DRY_RUN})"
+
+  # ---------------------------------------------------------------------------
+  # Job 2: 构建 VM 镜像
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build VM Image with Packer
+    runs-on: ubuntu-latest
+    needs: prepare
+    environment: production  # 要求在 GitHub 中配置 production 环境（可选，用于审批）
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---- 安装工具 ----
+
+      - name: Install Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: "latest"
+
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      # ---- Azure 认证 ----
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      # ---- 验证 Azure 资源是否存在 ----
+
+      - name: Verify Azure resources exist
+        run: |
+          echo "Verifying Shared Image Gallery exists..."
+          az sig show \
+            --gallery-name "${{ env.GALLERY_NAME }}" \
+            --resource-group "${{ env.SIG_RESOURCE_GROUP }}" \
+            --output table
+
+          echo "Verifying Image Definition exists..."
+          az sig image-definition show \
+            --gallery-name "${{ env.GALLERY_NAME }}" \
+            --gallery-image-definition "${{ env.IMAGE_DEFINITION }}" \
+            --resource-group "${{ env.SIG_RESOURCE_GROUP }}" \
+            --output table
+
+      # ---- 确保构建用临时资源组存在 ----
+
+      - name: Ensure Packer build resource group exists
+        run: |
+          if ! az group show --name "rg-packer-build" &>/dev/null; then
+            echo "Creating resource group 'rg-packer-build'..."
+            az group create \
+              --name "rg-packer-build" \
+              --location "${{ env.AZURE_LOCATION }}"
+          else
+            echo "Resource group 'rg-packer-build' already exists"
+          fi
+
+      # ---- Packer 构建 ----
+
+      - name: Initialize Packer plugins
+        working-directory: ${{ env.PACKER_DIR }}
+        run: packer init .
+
+      - name: Validate Packer template
+        working-directory: ${{ env.PACKER_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          packer validate \
+            -var "image_version=${{ needs.prepare.outputs.image_version }}" \
+            openclaw.pkr.hcl
+
+      - name: Build VM image with Packer
+        if: needs.prepare.outputs.dry_run != 'true'
+        working-directory: ${{ env.PACKER_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          # 禁用 Packer 彩色输出（CI 环境更易读）
+          PACKER_NO_COLOR: "true"
+        run: |
+          packer build \
+            -var "image_version=${{ needs.prepare.outputs.image_version }}" \
+            openclaw.pkr.hcl
+
+          echo "Packer build completed successfully"
+
+      - name: Skip build (dry run)
+        if: needs.prepare.outputs.dry_run == 'true'
+        run: echo "Dry run mode: Packer build skipped"
+
+      # ---- 上传构建清单 ----
+
+      - name: Upload Packer manifest
+        if: needs.prepare.outputs.dry_run != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: packer-manifest-${{ needs.prepare.outputs.image_version }}
+          path: ${{ env.PACKER_DIR }}/packer-manifest.json
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Job 3: 验证镜像（从 SIG 部署测试 VM）
+  # ---------------------------------------------------------------------------
+  validate:
+    name: Validate Image by Deploying Test VM
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: needs.prepare.outputs.dry_run != 'true'
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      - name: Create test resource group
+        run: |
+          az group create \
+            --name "rg-openclaw-test-${{ github.run_id }}" \
+            --location "${{ env.AZURE_LOCATION }}"
+
+      - name: Deploy test VM from image
+        id: deploy_vm
+        run: |
+          IMAGE_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.SIG_RESOURCE_GROUP }}/providers/Microsoft.Compute/galleries/${{ env.GALLERY_NAME }}/images/${{ env.IMAGE_DEFINITION }}/versions/${{ needs.prepare.outputs.image_version }}"
+
+          az vm create \
+            --resource-group "rg-openclaw-test-${{ github.run_id }}" \
+            --name "vm-openclaw-test" \
+            --image "${IMAGE_ID}" \
+            --admin-username "azureuser" \
+            --generate-ssh-keys \
+            --size "Standard_B2s" \
+            --output json > vm_output.json
+
+          VM_IP=$(cat vm_output.json | jq -r '.publicIpAddress')
+          echo "vm_ip=${VM_IP}" >> $GITHUB_OUTPUT
+          echo "Test VM deployed at: ${VM_IP}"
+
+      - name: Wait for VM to be ready
+        run: sleep 60
+
+      - name: Validate OpenClaw service is running
+        run: |
+          VM_IP="${{ steps.deploy_vm.outputs.vm_ip }}"
+
+          # 检查 SSH 连通性
+          ssh-keyscan -H "${VM_IP}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          # 通过 az vm run-command 远程检查服务状态（无需 SSH Key 配置）
+          az vm run-command invoke \
+            --resource-group "rg-openclaw-test-${{ github.run_id }}" \
+            --name "vm-openclaw-test" \
+            --command-id RunShellScript \
+            --scripts "systemctl is-active openclaw && openclaw --version" \
+            --output json | jq -r '.value[0].message'
+
+      - name: Cleanup test VM
+        if: always()
+        run: |
+          az group delete \
+            --name "rg-openclaw-test-${{ github.run_id }}" \
+            --yes \
+            --no-wait
+          echo "Test resource group deletion initiated (async)"
+
+  # ---------------------------------------------------------------------------
+  # Job 4: 发布通知
+  # ---------------------------------------------------------------------------
+  notify:
+    name: Notify Marketplace Submission
+    runs-on: ubuntu-latest
+    needs: [prepare, build, validate]
+    if: always()
+
+    steps:
+      - name: Summary
+        run: |
+          if [ "${{ needs.validate.result }}" = "success" ]; then
+            STATUS="SUCCESS"
+            EMOJI="✅"
+          elif [ "${{ needs.prepare.outputs.dry_run }}" = "true" ]; then
+            STATUS="DRY RUN"
+            EMOJI="🔍"
+          else
+            STATUS="FAILED"
+            EMOJI="❌"
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## ${EMOJI} OpenClaw VM Image Build ${STATUS}
+
+          | 项目 | 值 |
+          |---|---|
+          | **镜像版本** | ${{ needs.prepare.outputs.image_version }} |
+          | **Gallery** | ${{ env.GALLERY_NAME }} |
+          | **Image Definition** | ${{ env.IMAGE_DEFINITION }} |
+          | **Resource Group** | ${{ env.SIG_RESOURCE_GROUP }} |
+          | **触发事件** | ${{ github.event_name }} |
+          | **触发者** | ${{ github.actor }} |
+
+          ## 下一步：提交 Azure Marketplace
+
+          镜像已准备好，请前往 [Azure 合作夥伴中心](https://partner.microsoft.com/dashboard) 完成上架：
+
+          1. 找到你的 **虚拟机** 供应项目
+          2. 在「技术配置」中关联镜像版本：\`${{ needs.prepare.outputs.image_version }}\`
+          3. 点击「提交以进行审核」
+          EOF

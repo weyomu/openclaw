@@ -1,0 +1,99 @@
+{
+  "_comment": "Azure Marketplace VM 供应项目配置文件（示例）",
+  "_doc": "此文件用于 publish.sh 脚本调用 Partner Center API 时填充供应项目元数据",
+
+  "offer": {
+    "id": "openclaw-ai-assistant",
+    "type": "VirtualMachine",
+    "publisherId": "YOUR_PUBLISHER_ID",
+
+    "listingDetails": {
+      "title": "OpenClaw - Personal AI Assistant",
+      "shortDescription": "Run your own personal AI assistant on Azure. Connect WhatsApp, Telegram, Slack, Discord and 20+ channels to any AI model.",
+      "longDescription": "OpenClaw is a personal AI assistant gateway you run on your own Azure VM. It connects to the messaging channels you already use (WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, Microsoft Teams, Matrix, and 15+ more) and routes them to any AI model (OpenAI, Anthropic, Google Gemini, and more).\n\nKey Features:\n• Multi-channel inbox — 20+ messaging platforms out of the box\n• Any AI model — OpenAI, Claude, Gemini, Mistral, and local models\n• Voice support — wake words on macOS/iOS, continuous voice on Android\n• Live Canvas — agent-driven visual workspace\n• Skills platform — extend with bundled or custom skills\n• Privacy-first — your data stays on your own VM\n\nThis VM image ships with OpenClaw pre-installed and configured as a systemd service, so it starts automatically on boot. You only need to provide your API keys and messaging channel credentials after deployment.",
+
+      "privacyPolicyLink": "https://openclaw.ai/privacy",
+      "usefulLinks": [
+        {
+          "linkTitle": "OpenClaw Documentation",
+          "linkUrl": "https://openclaw.ai/docs"
+        },
+        {
+          "linkTitle": "GitHub Repository",
+          "linkUrl": "https://github.com/openclaw/openclaw"
+        },
+        {
+          "linkTitle": "Getting Started Guide",
+          "linkUrl": "https://openclaw.ai/docs/getting-started"
+        }
+      ],
+
+      "categories": [
+        "AI + Machine Learning",
+        "Developer Tools"
+      ],
+
+      "industries": [],
+
+      "contactDetails": {
+        "engineeringContactName": "OpenClaw Engineering",
+        "engineeringContactEmail": "engineering@openclaw.ai",
+        "engineeringContactPhone": "+1-000-000-0000",
+        "supportContactName": "OpenClaw Support",
+        "supportContactEmail": "support@openclaw.ai",
+        "supportContactPhone": "+1-000-000-0000",
+        "cloudSolutionProviderContactEmail": "csp@openclaw.ai",
+        "cloudSolutionProviderContactPhone": "+1-000-000-0000"
+      }
+    },
+
+    "reseller": {
+      "resellerChannelState": "NotSpecified"
+    }
+  },
+
+  "plans": [
+    {
+      "planId": "openclaw-standard",
+      "planName": "OpenClaw Standard",
+      "planDescription": "Single-user personal AI assistant. Ideal for individuals and small teams.",
+
+      "pricing": {
+        "licenseModel": "byol",
+        "_comment_pricing": "BYOL = Bring Your Own License. 用户自带 AI API Key，不收取额外软件费用。只收 Azure VM 基础设施费用。"
+      },
+
+      "technicalConfiguration": {
+        "operatingSystem": "Linux",
+        "recommendedVmSizes": [
+          "Standard_B2s",
+          "Standard_D2s_v3",
+          "Standard_D4s_v3"
+        ],
+        "openPorts": [
+          {
+            "port": 22,
+            "protocol": "TCP",
+            "description": "SSH access"
+          },
+          {
+            "port": 18789,
+            "protocol": "TCP",
+            "description": "OpenClaw Gateway WebSocket (optional, configure NSG to restrict access)"
+          }
+        ],
+        "diskDefinitions": [
+          {
+            "diskType": "OSDisk",
+            "diskSizeInGb": 64,
+            "storageAccountType": "Standard_LRS"
+          }
+        ],
+        "vmImage": {
+          "_comment": "构建完成后，将 SIG 镜像版本 ID 填入此处",
+          "sigImageVersionId": "/subscriptions/8361a9ea-366c-45d2-8c87-1386c2687d59/resourceGroups/rg-shared-images/providers/Microsoft.Compute/galleries/MyGallery/images/OpenClawImage/versions/REPLACE_WITH_VERSION"
+        }
+      }
+    }
+  ]
+}
