@@ -86,7 +86,6 @@ jobs:
     name: Build VM Image with Packer
     runs-on: ubuntu-latest
     needs: prepare
-    environment: production  # 要求在 GitHub 中配置 production 环境（可选，用于审批）
 
     steps:
       - name: Checkout repository
@@ -179,7 +178,6 @@ jobs:
           packer build \
             -var "image_version=${{ needs.prepare.outputs.image_version }}" \
             openclaw.pkr.hcl
-
           echo "Packer build completed successfully"
 
       - name: Skip build (dry run)
