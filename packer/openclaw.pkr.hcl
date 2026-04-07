@@ -107,7 +107,7 @@ source "azure-arm" "openclaw_ubuntu" {
   image_version   = "latest"
 
   # 构建用的临时 VM 规格（构建完成后自动删除）
-  vm_size = "Standard_D2s_v3"
+  vm_size = "Standard_DS2_v2"
 
   # 操作系统磁盘配置
   os_type         = "Linux"
