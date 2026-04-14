@@ -148,6 +148,7 @@ jobs:
           PACKER_NO_COLOR: "true"
         run: |
           packer build \
+            -force \
             -var "image_version=${{ needs.prepare.outputs.image_version }}" \
             openclaw.pkr.hcl
           echo "Packer build completed"
