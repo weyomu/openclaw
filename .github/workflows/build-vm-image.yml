@@ -221,7 +221,7 @@ jobs:
             --image "${IMAGE_ID}" \
             --admin-username "azureuser" \
             --generate-ssh-keys \
-            --size "Standard_B2s" \
+            --size "Standard_DC2s_v3" \
             --output json > vm_output.json
           VM_IP=$(cat vm_output.json | jq -r '.publicIpAddress')
           echo "vm_ip=${VM_IP}" >> $GITHUB_OUTPUT
