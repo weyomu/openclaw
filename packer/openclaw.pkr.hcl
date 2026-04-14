@@ -85,11 +85,11 @@ source "azure-arm" "openclaw_ubuntu" {
   managed_image_resource_group_name = local.managed_image_rg
   managed_image_name                = local.managed_image_name
 
-  # Base image: Ubuntu 24.04 LTS (same as your working config)
+  # Base image: Ubuntu 24.04 LTS
   os_type         = "Linux"
   image_publisher = "Canonical"
-  image_offer     = "0001-com-ubuntu-server-jammy"
-  image_sku       = "24_04-lts"
+  image_offer     = "ubuntu-24_04-lts"
+  image_sku       = "server"
   image_version   = "latest"
 
   # VM size that works in eastus
