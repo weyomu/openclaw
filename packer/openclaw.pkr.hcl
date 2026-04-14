@@ -93,7 +93,7 @@ source "azure-arm" "openclaw_ubuntu" {
   image_version   = "latest"
 
   # VM size that works in eastus
-  vm_size      = "Standard_D2s_v3"
+  vm_size      = "Standard_DC2s_v3"
   ssh_username = "packeruser"
 
   os_disk_size_gb = 64
