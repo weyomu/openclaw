@@ -127,7 +127,7 @@ build {
     inline = [
       "systemctl is-enabled openclaw || (echo 'ERROR: openclaw service not enabled' && exit 1)",
       "openclaw --version || true",
-      "test -f /var/lib/openclaw/.openclaw/openclaw.json || (echo 'ERROR: config file missing' && exit 1)",
+      "sudo test -f /var/lib/openclaw/.openclaw/openclaw.json || (echo 'ERROR: config file missing' && exit 1)",
       "echo 'OpenClaw installation verified successfully'",
     ]
   }
