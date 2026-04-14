@@ -121,11 +121,14 @@ build {
     timeout = "30m"
   }
 
-  # Verify OpenClaw service is running
+  # Verify OpenClaw is installed correctly
+  # Note: service is enabled but not started during image build (starts on first boot)
   provisioner "shell" {
     inline = [
-      "systemctl is-active openclaw || (echo 'ERROR: openclaw service not running' && exit 1)",
+      "systemctl is-enabled openclaw || (echo 'ERROR: openclaw service not enabled' && exit 1)",
       "openclaw --version || true",
+      "test -f /var/lib/openclaw/.openclaw/openclaw.json || (echo 'ERROR: config file missing' && exit 1)",
+      "echo 'OpenClaw installation verified successfully'",
     ]
   }
 
