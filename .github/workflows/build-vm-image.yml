@@ -1,9 +1,9 @@
-name: Build OpenClaw VM Image
+name: Build openclaw-gateway VM Image
 
 on:
   push:
     tags:
-      - "openclaw-v*"
+      - "openclaw-gateway-v*"
   workflow_dispatch:
     inputs:
       image_version:
@@ -24,13 +24,10 @@ env:
   AZURE_LOCATION: "East US"
   SIG_RESOURCE_GROUP: "rg-shared-images"
   GALLERY_NAME: "MyGallery"
-  IMAGE_DEFINITION: "OpenClawImage"
+  IMAGE_DEFINITION: "OpenclawGatewayImage"
   PACKER_DIR: "packer"
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Job 1: Parse version number
-  # ---------------------------------------------------------------------------
   prepare:
     name: Prepare Build Context
     runs-on: ubuntu-latest
@@ -47,7 +44,7 @@ jobs:
             DRY_RUN="${{ github.event.inputs.dry_run }}"
           else
             TAG="${{ github.ref_name }}"
-            VERSION="${TAG#openclaw-v}"
+            VERSION="${TAG#openclaw-gateway-v}"
             DRY_RUN="false"
           fi
 
@@ -60,9 +57,6 @@ jobs:
           echo "dry_run=${DRY_RUN}" >> $GITHUB_OUTPUT
           echo "Image version: ${VERSION}, dry_run: ${DRY_RUN}"
 
-  # ---------------------------------------------------------------------------
-  # Job 2: Build VM image with Packer
-  # ---------------------------------------------------------------------------
   build:
     name: Build VM Image with Packer
     runs-on: ubuntu-latest
@@ -127,7 +121,7 @@ jobs:
         run: |
           packer validate \
             -var "image_version=${{ needs.prepare.outputs.image_version }}" \
-            openclaw.pkr.hcl
+            openclaw-gateway.pkr.hcl
 
       - name: Ensure managed image resource group exists
         run: |
@@ -150,7 +144,7 @@ jobs:
           packer build \
             -force \
             -var "image_version=${{ needs.prepare.outputs.image_version }}" \
-            openclaw.pkr.hcl
+            openclaw-gateway.pkr.hcl
           echo "Packer build completed"
 
       - name: Publish managed image to Shared Image Gallery
@@ -158,7 +152,7 @@ jobs:
         run: |
           MANAGED_IMAGE_ID=$(az image show \
             --resource-group "rg-image-builders" \
-            --name "openclaw-${{ needs.prepare.outputs.image_version }}" \
+            --name "openclaw-gateway-${{ needs.prepare.outputs.image_version }}" \
             --query id --output tsv)
           echo "Managed image ID: ${MANAGED_IMAGE_ID}"
 
@@ -174,8 +168,7 @@ jobs:
 
       - name: Skip build (dry run mode)
         if: needs.prepare.outputs.dry_run == 'true'
-        run: |
-          echo "Dry run mode - build skipped"
+        run: echo "Dry run mode - build skipped"
 
       - name: Upload Packer manifest
         if: needs.prepare.outputs.dry_run != 'true'
@@ -185,9 +178,6 @@ jobs:
           path: ${{ env.PACKER_DIR }}/packer-manifest.json
           retention-days: 90
 
-  # ---------------------------------------------------------------------------
-  # Job 3: Validate image by deploying test VM
-  # ---------------------------------------------------------------------------
   validate:
     name: Validate Image
     runs-on: ubuntu-latest
@@ -209,7 +199,7 @@ jobs:
       - name: Create test resource group
         run: |
           az group create \
-            --name "rg-openclaw-test-${{ github.run_id }}" \
+            --name "rg-openclaw-gateway-test-${{ github.run_id }}" \
             --location "${{ env.AZURE_LOCATION }}"
 
       - name: Deploy test VM from image
@@ -217,8 +207,8 @@ jobs:
         run: |
           IMAGE_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.SIG_RESOURCE_GROUP }}/providers/Microsoft.Compute/galleries/${{ env.GALLERY_NAME }}/images/${{ env.IMAGE_DEFINITION }}/versions/${{ needs.prepare.outputs.image_version }}"
           az vm create \
-            --resource-group "rg-openclaw-test-${{ github.run_id }}" \
-            --name "vm-openclaw-test" \
+            --resource-group "rg-openclaw-gateway-test-${{ github.run_id }}" \
+            --name "vm-openclaw-gateway-test" \
             --image "${IMAGE_ID}" \
             --admin-username "azureuser" \
             --generate-ssh-keys \
@@ -231,26 +221,23 @@ jobs:
       - name: Wait for VM to boot
         run: sleep 60
 
-      - name: Validate OpenClaw service
+      - name: Validate service
         run: |
           az vm run-command invoke \
-            --resource-group "rg-openclaw-test-${{ github.run_id }}" \
-            --name "vm-openclaw-test" \
+            --resource-group "rg-openclaw-gateway-test-${{ github.run_id }}" \
+            --name "vm-openclaw-gateway-test" \
             --command-id RunShellScript \
-            --scripts "systemctl is-active openclaw && openclaw --version" \
+            --scripts "systemctl is-active openclaw-gateway" \
             --output json | jq -r '.value[0].message'
 
       - name: Cleanup test VM
         if: always()
         run: |
           az group delete \
-            --name "rg-openclaw-test-${{ github.run_id }}" \
+            --name "rg-openclaw-gateway-test-${{ github.run_id }}" \
             --yes \
             --no-wait
 
-  # ---------------------------------------------------------------------------
-  # Job 4: Summary
-  # ---------------------------------------------------------------------------
   notify:
     name: Build Summary
     runs-on: ubuntu-latest
@@ -267,15 +254,9 @@ jobs:
           else
             STATUS="FAILED"
           fi
-
-          cat >> $GITHUB_STEP_SUMMARY << 'SUMMARY'
-          ## OpenClaw VM Image Build Result
-          SUMMARY
-
-          cat >> $GITHUB_STEP_SUMMARY << SUMMARY
-          - Status: ${STATUS}
-          - Version: ${{ needs.prepare.outputs.image_version }}
-          - Gallery: ${{ env.GALLERY_NAME }}
-          - Image Definition: ${{ env.IMAGE_DEFINITION }}
-          - Triggered by: ${{ github.actor }}
-          SUMMARY
+          echo "## openclaw-gateway VM Image Build Result" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${STATUS}" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: ${{ needs.prepare.outputs.image_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Gallery: ${{ env.GALLERY_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image Definition: ${{ env.IMAGE_DEFINITION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Triggered by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
